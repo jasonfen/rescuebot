@@ -17,6 +17,8 @@ LIVE_SECURITY="http://deb.debian.org/debian-security/"
 # shim-signed + grub-efi-amd64-signed and fail rather than fall back.
 # Kernel and modules come from linux-image-amd64 (Debian-signed), and
 # --linux-packages is limited to linux-image so no headers/DKMS are pulled in.
+# memtest86+ is a legacy-BIOS-only menu entry: its EFI binary is not Secure Boot
+# signed, and config/bootloaders/grub-pc/grub.cfg has no memtest entry.
 
 lb config noauto \
 	--distribution trixie \
@@ -46,7 +48,7 @@ lb config noauto \
 	--uefi-secure-boot enable \
 	--linux-flavours amd64 \
 	--linux-packages "linux-image" \
-	--memtest none \
+	--memtest memtest86+ \
 	--checksums sha256 \
 	--chroot-squashfs-compression-type xz \
 	--iso-application "Rescuebot" \
