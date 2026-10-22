@@ -3,4 +3,5 @@
 # (the grub menu has no memtest entry), so keep it off the ISO. The legacy BIOS
 # entry uses live/memtest.bin and is unaffected.
 set -e
-rm -f binary/live/memtest.efi
+# Binary hooks run with the binary/ tree as the working directory.
+rm -f live/memtest.efi
