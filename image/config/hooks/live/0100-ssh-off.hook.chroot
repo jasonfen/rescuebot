@@ -1,8 +1,12 @@
 #!/bin/sh
 # sshd is installed but must not run at boot. Enabling it is a deliberate user
 # action later (needs a password or key). Remove build-time host keys so every
-# boot generates its own (live-config's openssh-server component does that).
+# boot gets its own, generated when SSH is enabled.
 set -e
 systemctl disable ssh.service ssh.socket 2>/dev/null || true
 systemctl disable sshd.service 2>/dev/null || true
 rm -f /etc/ssh/ssh_host_*
+# live-config's openssh-server component would generate host keys at every boot
+# and force "PasswordAuthentication no". Host keys are generated instead by
+# rescuebot-ssh-enable, when the person turns SSH on.
+rm -f /usr/lib/live/config/1160-openssh-server

@@ -19,6 +19,13 @@ minutes, but it works). CI runs the same script on a native amd64 runner.
 | `config/bootloaders/` | boot menus: desktop (default), console only, safe graphics |
 | `config/hooks/live/` | sshd off at boot; build-time assertions (no Claude Code, no DKMS, backports kernel) |
 
+SSH: sshd is installed but off, the live user's password is locked, and the image
+carries no SSH host keys. `sudo rescuebot-ssh-enable` (run by the person) sets a password,
+generates host keys for that boot and starts sshd. Local autologin and passwordless sudo are unchanged.
+
+Boot menu: memtest86+ is a legacy-BIOS-only entry (Utilities); the UEFI menu has none because
+its EFI binary is not Secure Boot signed.
+
 Rules this tree enforces (see the planning ADRs 0003, 0004, 0008): no Claude Code
 in the image, no locally built or DKMS modules, kernel and firmware from
 trixie-backports. The package mapping from SystemRescue is in `docs/package-map.md`.

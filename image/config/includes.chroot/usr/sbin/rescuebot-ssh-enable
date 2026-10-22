@@ -1,0 +1,32 @@
+#!/bin/sh
+# Turn on SSH for this boot. Run by the person at the keyboard.
+# Sets a password for the live user, generates this boot's SSH host keys
+# (the image ships none, so no two boots share keys), and starts sshd.
+# Nothing persists on a Stateless Boot.
+#
+# Password comes from the terminal prompt; if stdin is not a terminal,
+# it is read as one line from stdin (for scripted tests).
+set -eu
+
+[ "$(id -u)" -eq 0 ] || exec sudo "$0" "$@"
+
+user="${RESCUEBOT_USER:-rescue}"
+id "$user" >/dev/null 2>&1 || { echo "no such user: $user" >&2; exit 1; }
+
+if [ -t 0 ]; then
+	echo "Choose an SSH password for '$user'."
+	passwd "$user"
+else
+	IFS= read -r pw
+	[ -n "$pw" ] || { echo "empty password" >&2; exit 1; }
+	printf '%s:%s\n' "$user" "$pw" | chpasswd
+fi
+
+ssh-keygen -A >/dev/null
+systemctl enable --now ssh.service
+
+echo
+echo "SSH is on. Log in as '$user' at:"
+ip -brief addr 2>/dev/null | awk '$1 != "lo" && $3 != "" {print "  " $3}'
+echo "Host key fingerprints (check these on first connect):"
+for k in /etc/ssh/ssh_host_*_key.pub; do ssh-keygen -lf "$k"; done
