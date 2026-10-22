@@ -26,6 +26,7 @@ lb build 2>&1 | tee /build/work/build.log
 
 iso="$(ls /build/work/*.iso | head -n1)"
 name="rescuebot-${SNAPSHOT}-amd64.iso"
+/src/check-iso.sh "$iso"
 cp "$iso" "/out/$name"
 cp /build/work/live-image-amd64.contents /out/rescuebot-${SNAPSHOT}-amd64.contents 2>/dev/null || true
 cp /build/work/live-image-amd64.packages /out/rescuebot-${SNAPSHOT}-amd64.packages 2>/dev/null || true

@@ -1,0 +1,6 @@
+#!/bin/sh
+# memtest86+'s EFI binary is not Secure Boot signed and nothing references it
+# (the grub menu has no memtest entry), so keep it off the ISO. The legacy BIOS
+# entry uses live/memtest.bin and is unaffected.
+set -e
+rm -f binary/live/memtest.efi
