@@ -1,0 +1,2 @@
+# Shipped image: live backports, so a booted Rescuebot can get newer kernels.
+deb http://deb.debian.org/debian/ trixie-backports main non-free-firmware

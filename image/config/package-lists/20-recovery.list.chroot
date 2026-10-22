@@ -1,0 +1,100 @@
+# Recovery toolset. See docs/package-map.md for the SystemRescue mapping and
+# what was dropped.
+# Imaging and cloning
+gddrescue
+ddrutility
+partclone
+partimage
+fsarchiver
+clonezilla
+testdisk
+foremost
+sleuthkit
+pv
+# Partitioning and boot repair
+gparted
+parted
+gdisk
+gpart
+fatresize
+fatsort
+efibootmgr
+efitools
+efivar
+grub-pc-bin
+grub-efi-amd64-bin
+grub-common
+syslinux
+kpartx
+# Filesystems
+dosfstools
+e2fsprogs
+exfatprogs
+f2fs-tools
+jfsutils
+xfsprogs
+xfsdump
+nilfs-tools
+ntfs-3g
+btrfs-progs
+udftools
+mtools
+squashfs-tools
+fuse3
+# Encryption, RAID, LVM
+cryptsetup
+mdadm
+lvm2
+multipath-tools
+thin-provisioning-tools
+dislocker
+ecryptfs-utils
+# Windows account and archives
+chntpw
+wimtools
+cabextract
+# Disk and hardware health
+smartmontools
+gsmartcontrol
+nvme-cli
+hdparm
+sdparm
+sg3-utils
+lsscsi
+nwipe
+wipe
+zerofree
+lshw
+hwinfo
+hardinfo
+dmidecode
+pciutils
+usbutils
+inxi
+lm-sensors
+flashrom
+ipmitool
+memtester
+stress-ng
+usb-modeswitch
+# Archives and compression
+7zip
+zip
+unzip
+xz-utils
+zstd
+lz4
+lzop
+par2
+# Files and inspection
+file
+hexedit
+ghex
+ncdu
+tree
+jq
+plocate
+htop
+atop
+iotop-c
+kexec-tools

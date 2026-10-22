@@ -1,0 +1,21 @@
+#!/bin/sh
+# Fail the build if anything violates ADR 0003 (no Claude Code) or ADR 0004
+# (no locally built or non-Debian kernel modules).
+set -e
+fail() { echo "ASSERT FAILED: $*" >&2; exit 1; }
+
+command -v claude >/dev/null 2>&1 && fail "claude binary present (ADR 0003)"
+for p in dkms zfs-dkms nvidia-kernel-dkms broadcom-sta-dkms; do
+	dpkg -s "$p" >/dev/null 2>&1 && fail "$p installed (ADR 0004)"
+done
+ls /usr/src/*/dkms.conf >/dev/null 2>&1 && fail "dkms source tree present (ADR 0004)"
+for d in /lib/modules/*/updates /lib/modules/*/extra /lib/modules/*/misc; do
+	[ -e "$d" ] && fail "out-of-tree module dir $d (ADR 0004)"
+done
+kver=$(ls /lib/modules | head -n1)
+case "$kver" in
+	7.*|6.1[3-9]*|6.[2-9]*) ;;
+	*) fail "kernel $kver does not look like a backports kernel" ;;
+esac
+dpkg -s "linux-image-$kver" 2>/dev/null | grep -q '~bpo13' || fail "linux-image-$kver is not a ~bpo13 package"
+echo "clean-base assertions passed (kernel $kver)"

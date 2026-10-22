@@ -1,0 +1,63 @@
+#!/bin/sh
+# live-build configuration for the Rescuebot Live ISO.
+# Run by `lb config`. The snapshot date comes from ./SNAPSHOT (or $SNAPSHOT).
+set -e
+
+SNAPSHOT="${SNAPSHOT:-$(cat SNAPSHOT)}"
+SNAP_DEBIAN="http://snapshot.debian.org/archive/debian/${SNAPSHOT}/"
+SNAP_SECURITY="http://snapshot.debian.org/archive/debian-security/${SNAPSHOT}/"
+LIVE_MIRROR="http://deb.debian.org/debian/"
+LIVE_SECURITY="http://deb.debian.org/debian-security/"
+
+# Mirrors: the chroot (what goes into the squashfs) is built from the pinned
+# snapshot. The mirrors written into the shipped image's apt config are the
+# normal live ones, so a booted Rescuebot can fetch current packages.
+#
+# Secure Boot: --uefi-secure-boot enable makes live-build use the Debian-signed
+# shim-signed + grub-efi-amd64-signed and fail rather than fall back.
+# Kernel and modules come from linux-image-amd64 (Debian-signed), and
+# --linux-packages is limited to linux-image so no headers/DKMS are pulled in.
+
+lb config noauto \
+	--distribution trixie \
+	--architectures amd64 \
+	--archive-areas "main non-free-firmware" \
+	--parent-archive-areas "main non-free-firmware" \
+	--mirror-bootstrap "${SNAP_DEBIAN}" \
+	--mirror-chroot "${SNAP_DEBIAN}" \
+	--mirror-chroot-security "${SNAP_SECURITY}" \
+	--parent-mirror-bootstrap "${SNAP_DEBIAN}" \
+	--parent-mirror-chroot "${SNAP_DEBIAN}" \
+	--parent-mirror-chroot-security "${SNAP_SECURITY}" \
+	--mirror-binary "${LIVE_MIRROR}" \
+	--mirror-binary-security "${LIVE_SECURITY}" \
+	--parent-mirror-binary "${LIVE_MIRROR}" \
+	--parent-mirror-binary-security "${LIVE_SECURITY}" \
+	--security true \
+	--updates true \
+	--backports false \
+	--apt-recommends false \
+	--apt-indices false \
+	--apt-source-archives false \
+	--firmware-chroot false \
+	--debian-installer none \
+	--binary-image iso-hybrid \
+	--bootloaders "syslinux,grub-efi" \
+	--uefi-secure-boot enable \
+	--linux-flavours amd64 \
+	--linux-packages "linux-image" \
+	--memtest none \
+	--checksums sha256 \
+	--chroot-squashfs-compression-type xz \
+	--iso-application "Rescuebot" \
+	--iso-publisher "Rescuebot project; https://github.com/jasonfen/rescuebot" \
+	--iso-volume "RESCUEBOT" \
+	--bootappend-live "boot=live components quiet live-config.hostname=rescuebot live-config.username=rescue" \
+	"${@}"
+
+# Build-time backports source, from the same snapshot (written here because it
+# needs the snapshot date). The shipped image gets config/archives/backports.list.binary.
+mkdir -p config/archives
+cat > config/archives/backports.list.chroot <<LIST
+deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/${SNAPSHOT}/ trixie-backports main non-free-firmware
+LIST

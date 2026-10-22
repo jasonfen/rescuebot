@@ -1,0 +1,6 @@
+# Kernel and firmware come from trixie-backports (Debian-signed), everything
+# else stays on stable. Backports are NotAutomatic, so without this pin apt
+# would pick the stable kernel.
+Package: linux-image-* linux-base linux-kbuild-* linux-libc-dev firmware-* amd64-microcode intel-microcode
+Pin: release n=trixie-backports
+Pin-Priority: 900
