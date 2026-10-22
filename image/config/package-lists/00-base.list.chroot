@@ -1,0 +1,61 @@
+# Live system, kernel, firmware. Kernel and firmware resolve to trixie-backports
+# through config/archives/backports.pref.chroot. Never list dkms, *-dkms,
+# linux-headers-* or any module-building package here (ADR 0004).
+live-boot
+live-config
+live-config-systemd
+live-tools
+systemd-sysv
+initramfs-tools
+linux-image-amd64
+firmware-linux
+firmware-iwlwifi
+firmware-realtek
+firmware-atheros
+firmware-brcm80211
+firmware-mediatek
+firmware-misc-nonfree
+firmware-intel-misc
+firmware-intel-graphics
+firmware-amd-graphics
+firmware-intel-sound
+firmware-sof-signed
+firmware-bnx2
+firmware-bnx2x
+firmware-qlogic
+intel-microcode
+amd64-microcode
+wireless-regdb
+# Base userland
+sudo
+locales
+console-setup
+keyboard-configuration
+kbd
+bash
+bash-completion
+man-db
+less
+nano
+vim
+tmux
+screen
+mc
+kmod
+udev
+procps
+psmisc
+iproute2
+iputils-ping
+# Recommends of live-config/live-boot/Xfce that matter, listed explicitly
+# because the build runs with --apt-recommends false. user-setup is what makes
+# live-config create the live user; without it there is no autologin.
+user-setup
+uuid-runtime
+libpam-systemd
+dbus
+dbus-user-session
+libglib2.0-bin
+upower
+librsvg2-common
+xdg-user-dirs

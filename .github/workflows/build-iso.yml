@@ -1,0 +1,59 @@
+# Builds the Rescuebot Live ISO and attests its provenance (Sigstore, via
+# GitHub artifact attestations; ADR 0007).
+#
+# This workflow does NOT tag, create a release, or publish anything. Release
+# publication is a separate, later step. Attestations made here describe the
+# build of the ref that triggered it (a PR merge ref or main), not a release tag.
+name: build-iso
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-iso-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      id-token: write          # Sigstore signing certificate
+      attestations: write      # store the attestation
+      artifact-metadata: write # storage record for the attested artifact
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      - name: Build ISO
+        run: image/build.sh "$GITHUB_WORKSPACE/out"
+
+      - name: Show result
+        run: |
+          ls -l out
+          cat out/*.sha256
+
+      - name: Attest build provenance
+        # Fork PRs get a read-only token and cannot mint attestations.
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: out/*.iso
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: rescuebot-iso
+          path: out/
+          retention-days: 14
+          compression-level: 0

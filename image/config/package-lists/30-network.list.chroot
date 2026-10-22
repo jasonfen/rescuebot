@@ -1,0 +1,37 @@
+network-manager
+network-manager-gnome
+network-manager-openvpn
+network-manager-vpnc
+wpasupplicant
+iw
+wireless-tools
+rfkill
+ethtool
+openvpn
+wireguard-tools
+nmap
+tcpdump
+mtr-tiny
+traceroute
+iperf3
+netcat-openbsd
+dnsmasq-base
+sshfs
+cifs-utils
+nfs-common
+smbclient
+lftp
+rsync
+rclone
+borgbackup
+rdiff-backup
+wget
+ppp
+minicom
+picocom
+# sshd is installed but disabled at boot by hooks/live/0100-ssh-off.hook.chroot
+openssh-server
+openssh-client
+# Guest integration when the Patient is a VM or when testing in one
+qemu-guest-agent
+spice-vdagent

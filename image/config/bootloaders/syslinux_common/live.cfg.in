@@ -1,0 +1,18 @@
+label live-desktop
+	menu label Rescuebot (^desktop)
+	menu default
+	linux @LINUX@
+	initrd @INITRD@
+	append @APPEND_LIVE@
+
+label live-console
+	menu label Rescuebot (^console only)
+	linux @LINUX@
+	initrd @INITRD@
+	append @APPEND_LIVE@ systemd.unit=multi-user.target
+
+label live-safegfx
+	menu label Rescuebot (desktop, ^safe graphics)
+	linux @LINUX@
+	initrd @INITRD@
+	append @APPEND_LIVE@ nomodeset

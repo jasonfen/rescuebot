@@ -1,0 +1,8 @@
+#!/bin/sh
+# sshd is installed but must not run at boot. Enabling it is a deliberate user
+# action later (needs a password or key). Remove build-time host keys so every
+# boot generates its own (live-config's openssh-server component does that).
+set -e
+systemctl disable ssh.service ssh.socket 2>/dev/null || true
+systemctl disable sshd.service 2>/dev/null || true
+rm -f /etc/ssh/ssh_host_*

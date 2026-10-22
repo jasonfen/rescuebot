@@ -1,0 +1,13 @@
+# Prerequisites for installing Claude Code later. Claude Code itself is NOT
+# installed (ADR 0003). From the official Linux install docs (checked 2026-10-22):
+# native installer = bash + curl; apt-repository install = curl + gnupg;
+# ripgrep is used for search; glibc builds need libstdc++/libgcc.
+# Also needed at install/run time: ca-certificates, git.
+bash
+curl
+ca-certificates
+gnupg
+ripgrep
+git
+libstdc++6
+libgcc-s1
