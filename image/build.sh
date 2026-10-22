@@ -9,6 +9,7 @@ here="$(cd "$(dirname "$0")" && pwd)"
 out="$(mkdir -p "${1:-$here/../out}" && cd "${1:-$here/../out}" && pwd)"
 snapshot="${SNAPSHOT:-$(cat "$here/SNAPSHOT")}"
 gitrev="$(git -C "$here" rev-parse HEAD 2>/dev/null || echo unknown)"
+if [ -n "$(git -C "$here" status --porcelain -- "$here" 2>/dev/null)" ]; then gitrev="$gitrev-dirty"; fi
 
 docker build --platform linux/amd64 --build-arg "SNAPSHOT=$snapshot" \
 	-t rescuebot-builder -f "$here/Dockerfile" "$here"

@@ -47,3 +47,15 @@ procps
 psmisc
 iproute2
 iputils-ping
+# Recommends of live-config/live-boot/Xfce that matter, listed explicitly
+# because the build runs with --apt-recommends false. user-setup is what makes
+# live-config create the live user; without it there is no autologin.
+user-setup
+uuid-runtime
+libpam-systemd
+dbus
+dbus-user-session
+libglib2.0-bin
+upower
+librsvg2-common
+xdg-user-dirs
