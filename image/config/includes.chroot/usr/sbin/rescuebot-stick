@@ -172,7 +172,8 @@ replace_slot() { # dev slot secret
 	cryptsetup luksAddKey --batch-mode --volume-key-file "$tmp/vk" --new-key-slot "$SLOT_SPARE" "$1" "$kf"
 	cryptsetup luksKillSlot --batch-mode "$1" "$2" </dev/null 2>/dev/null || true
 	cryptsetup luksAddKey --batch-mode --volume-key-file "$tmp/vk" --new-key-slot "$2" "$1" "$kf"
-	cryptsetup luksKillSlot --batch-mode "$1" "$SLOT_SPARE" </dev/null
+	# Batch mode needs no passphrase but still prints "Nothing to read on input".
+	cryptsetup luksKillSlot --batch-mode "$1" "$SLOT_SPARE" </dev/null 2>/dev/null
 }
 
 cmd_setup() {

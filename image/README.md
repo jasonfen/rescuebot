@@ -17,11 +17,20 @@ minutes, but it works). CI runs the same script on a native amd64 runner.
 | `config/package-lists/` | package lists (base, Claude Code prerequisites, recovery, network, desktop) |
 | `config/archives/` | trixie-backports source and the pin that sends kernel and firmware there |
 | `config/bootloaders/` | boot menus: desktop (default), console only, safe graphics |
-| `config/hooks/live/` | sshd off at boot; build-time assertions (no Claude Code, no DKMS, backports kernel) |
+| `config/hooks/live/` | sshd off at boot; build-time assertions (no Claude Code, no DKMS, backports kernel, cryptsetup in initrd) |
+| `config/includes.chroot/` | `rescuebot-ssh-enable`, `rescuebot-stick` (Stick Setup), live-config and autostart pieces |
 
 SSH: sshd is installed but off, the live user's password is locked, and the image
 carries no SSH host keys. `sudo rescuebot-ssh-enable` (run by the person) sets a password,
 generates host keys for that boot and starts sshd. Local autologin and passwordless sudo are unchanged.
+
+Rescue Stick: write the ISO to a USB stick with any tool and boot it. Rescuebot offers
+Stick Setup (`sudo rescuebot-stick setup`, also in Applications > System), which adds an
+encrypted Saved State as partition 3 from 8 GiB to the end of the stick and shows a
+Recovery Key once. At each boot live-boot asks for the passphrase (US layout); Enter then
+`n` skips it for a Stateless Boot. `rescuebot-stick status | passphrase | recovery-key`
+manage it. Only LUKS volumes labelled `persistence` are ever opened at boot, and no other
+partition is mounted while looking. Writing a new ISO to the stick destroys the Saved State.
 
 Boot menu: memtest86+ is a legacy-BIOS-only entry (Utilities); the UEFI menu has none because
 its EFI binary is not Secure Boot signed.
