@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=Offer Stick Setup
+Exec=/usr/lib/rescuebot/offer-stick-setup
+OnlyShowIn=XFCE;
+NoDisplay=true

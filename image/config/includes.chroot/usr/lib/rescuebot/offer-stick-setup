@@ -1,0 +1,21 @@
+#!/bin/sh
+# Xfce autostart: on a boot from a USB stick that has no Saved State yet, open a
+# terminal offering Stick Setup. Silent on the Live ISO, on Stick Setup already
+# done (including a Stateless Boot that declined the passphrase), and once the
+# person has said no for this boot.
+src="$(findmnt -no SOURCE /run/live/medium 2>/dev/null)" || exit 0
+case "$src" in /dev/sd*) ;; *) exit 0 ;; esac
+disk="$(lsblk -ndo PKNAME "$src" 2>/dev/null)"
+[ -n "$disk" ] || disk="$(basename "$src")"
+[ "$(lsblk -ndo TRAN "/dev/$disk" 2>/dev/null)" = usb ] || exit 0
+[ -e "/dev/${disk}3" ] && exit 0
+exec xfce4-terminal --title "Stick Setup" --hold -x sh -c '
+echo "Rescuebot is running from a USB stick with no Saved State."
+echo "Stick Setup turns it into a Rescue Stick that keeps your files, settings"
+echo "and Jobs between boots, encrypted. Without it, every boot starts fresh."
+echo
+printf "Run Stick Setup now? [y/N] "
+read a
+case "$a" in y|Y|yes) exec sudo rescuebot-stick setup ;; esac
+echo "Skipped. Run it later from Applications > System > Stick Setup, or: sudo rescuebot-stick setup"
+'
