@@ -19,7 +19,7 @@ non-free-firmware), not from memory.
 | Filesystems | dosfstools, e2fsprogs, exfatprogs, f2fs-tools, jfsutils, xfsprogs, xfsdump, nilfs-tools (nilfs-utils), ntfs-3g, btrfs-progs, udftools, mtools, squashfs-tools, fuse3 |
 | Encryption, RAID, LVM | cryptsetup, mdadm, lvm2, multipath-tools, thin-provisioning-tools, dislocker, ecryptfs-utils |
 | Windows accounts, archives | chntpw, wimtools (wimlib), cabextract, 7zip, zip, unzip, xz-utils, zstd, lz4, lzop, par2 |
-| Disk and hardware health | smartmontools, gsmartcontrol, nvme-cli, hdparm, sdparm, sg3-utils, lsscsi, nwipe, wipe, zerofree, lshw, hwinfo, hardinfo, dmidecode, pciutils, usbutils, inxi, lm-sensors, flashrom, ipmitool, memtester, stress-ng, usb-modeswitch |
+| Disk and hardware health | smartmontools, gsmartcontrol, nvme-cli, hdparm, sdparm, sg3-utils, lsscsi, nwipe, wipe, zerofree, lshw, hwinfo, hardinfo, dmidecode, pciutils, usbutils, inxi, lm-sensors, flashrom, ipmitool, memtester, stress-ng, usb-modeswitch, memtest86+ (legacy-BIOS boot menu only via `--memtest`; its unsigned EFI binary is stripped from the ISO) |
 | Network | network-manager (+ gnome applet, openvpn, vpnc), wpasupplicant, iw, wireless-tools, rfkill, ethtool, openvpn, wireguard-tools, nmap, tcpdump, mtr-tiny (mtr), traceroute, iperf3, netcat-openbsd, sshfs, cifs-utils, nfs-common (nfs-utils), smbclient, lftp, rsync, rclone, borgbackup (borg), rdiff-backup, ppp, minicom, picocom |
 | Desktop | Xfce (session, wm, panel, settings, terminal, appfinder, taskmanager, screenshooter, power-manager), thunar, mousepad (for featherpad/geany), xarchiver, ristretto, galculator, keepassxc, firefox-esr (firefox-esr-bin), remmina, x11vnc, pavucontrol |
 | Editors, shell | vim, nano, mc, tmux, screen, htop, atop, ncdu, tree, jq, hexedit, ghex, less |
@@ -43,7 +43,6 @@ in `10-claude-prereqs.list.chroot`; Claude Code itself is not installed (ADR 000
 | dd_rescue | Not in Debian 13 under that name (checked); gddrescue is the standard tool. |
 | whdd | Not in Debian. |
 | unrar | Non-free section, not enabled (only main + non-free-firmware). 7zip reads RAR. |
-| memtest86+ | Not included (`--memtest none`). Its EFI binary is not Secure Boot signed, so offering it would break the clean-boot story; BIOS-only is inconsistent across entries. Revisit. |
 | zfs (SystemRescue builds it in) | Add-on by ADR 0004; needs locally built modules. |
 | yubikey-*, pam-u2f, stoken, oath-toolkit, pcsclite, ccid | FIDO2/token unlock is out of v1 (design D17). |
 | refind, timeshift, grsync, speedtest-cli, irssi, elinks, geany, featherpad, xfburn, rkhunter, darkhttpd, dnsmasq (server), nfs server bits, udpcast, drbl, wvdial, pptpclient, xl2tpd | Not needed for rescue; keep the image under the 2 GiB release-asset limit. Easy to add back. |
