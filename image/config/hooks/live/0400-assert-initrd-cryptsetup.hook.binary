@@ -1,0 +1,14 @@
+#!/bin/sh
+# live-boot can only unlock the Saved State if the initrd carries cryptsetup and
+# askpass (from cryptsetup-initramfs). Fail the build if they are missing.
+# Binary hooks run with the binary/ tree as the working directory.
+set -e
+cp live/initrd.img ../chroot/tmp/rescuebot-initrd.img
+listing="$(chroot ../chroot lsinitramfs /tmp/rescuebot-initrd.img)"
+rm -f ../chroot/tmp/rescuebot-initrd.img
+# Paths may sit under usr/ or not, depending on the usr-merge layout of the initrd.
+# live-boot's helpers are the positive control that the listing works at all.
+for f in live/boot/9990-misc-helpers.sh sbin/cryptsetup cryptsetup/askpass; do
+	echo "$listing" | grep -qE "(^|/)$f\$" || { echo "ASSERT FAILED: $f missing from initrd" >&2; exit 1; }
+done
+echo "initrd assertions passed (cryptsetup, askpass, live-boot present)"

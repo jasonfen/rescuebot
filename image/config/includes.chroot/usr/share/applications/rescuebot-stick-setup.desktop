@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Stick Setup
+Comment=Turn this USB stick into a Rescue Stick with an encrypted Saved State
+Exec=xfce4-terminal --title "Stick Setup" --hold -x sudo rescuebot-stick setup
+Icon=drive-removable-media
+Categories=System;

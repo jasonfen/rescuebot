@@ -59,3 +59,8 @@ libglib2.0-bin
 upower
 librsvg2-common
 xdg-user-dirs
+# Stick Setup: cryptsetup-initramfs puts cryptsetup and askpass in the initrd so
+# live-boot can unlock the Saved State at boot; qrencode shows the Recovery Key
+# as a QR code.
+cryptsetup-initramfs
+qrencode

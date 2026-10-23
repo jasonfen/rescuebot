@@ -1,0 +1,309 @@
+#!/bin/bash
+# Stick Setup and Saved State management for a Rescue Stick.
+#
+#   rescuebot-stick setup          turn the USB stick this system booted from into
+#                                  a Rescue Stick: encrypted Saved State, passphrase
+#                                  and Recovery Key
+#   rescuebot-stick status         show the stick and its Saved State
+#   rescuebot-stick passphrase     change the passphrase (needs the passphrase or
+#                                  the Recovery Key)
+#   rescuebot-stick recovery-key   make a new Recovery Key; the old one stops working
+#
+# Layout (ADR 0005): the image occupies the start of the stick; the Saved State
+# is MBR partition 3 from 8 GiB to the end, so in-place upgrades have room to
+# grow the image. LUKS2 keyslot 0 holds the passphrase, keyslot 1 the Recovery
+# Key. live-boot unlocks it at boot (persistence-encryption=lukslabel only opens
+# LUKS volumes labelled "persistence"); declining the prompt is a Stateless Boot.
+#
+# Secrets come from the terminal; if stdin is not a terminal they are read one
+# per line from stdin (for scripted tests), and `setup` then needs --yes.
+set -euo pipefail
+
+[ "$(id -u)" -eq 0 ] || exec sudo "$0" "$@"
+
+STATE_START=16777216          # sectors of 512 bytes: 8 GiB
+MIN_STATE_BYTES=$((2 << 30))  # refuse sticks with less than 2 GiB for the Saved State
+LUKS_LABEL=persistence        # fixed by live-boot's lukslabel check
+FS_LABEL=persistence          # live-boot's default persistence label
+SLOT_PASS=0
+SLOT_RECOVERY=1
+SLOT_SPARE=7
+# Lowercase letters that sit on the same key on US, UK, German, French, Spanish,
+# Italian and Nordic layouts (no a q w z y m) and have no look-alikes (no i l o).
+# The boot prompt uses the US layout, so a Recovery Key from this set types
+# correctly on any of those keyboards. 32 letters = 130 bits.
+RK_ALPHABET=bcdefghjknprstuvx
+RK_LEN=32
+MIN_PASS_LEN=8
+
+die() { echo "rescuebot-stick: $*" >&2; exit 1; }
+
+tmp=""
+cleanup() {
+	if [ -n "$tmp" ] && [ -d "$tmp" ]; then
+		find "$tmp" -type f -exec shred -u {} + 2>/dev/null || true
+		rm -rf "$tmp"
+	fi
+}
+trap cleanup EXIT
+secret_dir() {
+	# /run is tmpfs: keys never touch the stick.
+	[ -n "$tmp" ] || tmp="$(umask 077 && mktemp -d /run/rescuebot-stick.XXXXXX)"
+}
+
+# Disk (e.g. sdb) holding the live medium; empty if it is not a whole disk.
+boot_disk() {
+	local src parent
+	src="$(findmnt -no SOURCE /run/live/medium 2>/dev/null || true)"
+	case "$src" in
+		/dev/sd*|/dev/nvme*|/dev/mmcblk*|/dev/vd*) ;;
+		*) return 0 ;;
+	esac
+	parent="$(lsblk -ndo PKNAME "$src" 2>/dev/null || true)"
+	if [ -n "$parent" ]; then echo "$parent"; else basename "$src"; fi
+}
+
+part_dev() {
+	case "$1" in
+		nvme*|mmcblk*) echo "/dev/${1}p$2" ;;
+		*) echo "/dev/$1$2" ;;
+	esac
+}
+
+# Prints the stick disk name or dies explaining why this boot cannot have a Saved State.
+require_stick() {
+	local disk tran
+	disk="$(boot_disk)"
+	[ -n "$disk" ] || die "not booted from a USB stick (CD, Ventoy, VM image or toram boot): the Live ISO keeps no state"
+	tran="$(lsblk -ndo TRAN "/dev/$disk" 2>/dev/null || true)"
+	[ "$tran" = usb ] || die "boot disk /dev/$disk is not a USB device (transport: ${tran:-unknown}); only USB sticks can be Rescue Sticks"
+	echo "$disk"
+}
+
+state_part() { part_dev "$1" 3; }
+
+is_state() { [ -b "$1" ] && cryptsetup isLuks "$1" 2>/dev/null && [ "$(blkid -s LABEL -o value "$1" 2>/dev/null)" = "$LUKS_LABEL" ]; }
+
+read_secret() { # prompt varname
+	local v
+	if [ -t 0 ]; then
+		IFS= read -r -s -p "$1" v; echo >&2
+	else
+		IFS= read -r v || true
+	fi
+	printf -v "$2" '%s' "$v"
+}
+
+new_passphrase() { # varname
+	local a b
+	while true; do
+		read_secret "New passphrase: " a
+		if [ "${#a}" -lt "$MIN_PASS_LEN" ]; then
+			[ -t 0 ] || die "passphrase shorter than $MIN_PASS_LEN characters"
+			echo "Use at least $MIN_PASS_LEN characters." >&2; continue
+		fi
+		if [ -t 0 ]; then
+			read_secret "Same passphrase again: " b
+			[ "$a" = "$b" ] || { echo "They do not match. Try again." >&2; continue; }
+		fi
+		break
+	done
+	printf -v "$1" '%s' "$a"
+}
+
+new_recovery_key() { # varname
+	local k="" n=${#RK_ALPHABET} b
+	# Rejection sampling keeps every letter equally likely.
+	while [ "${#k}" -lt "$RK_LEN" ]; do
+		for b in $(od -An -tu1 -N64 /dev/urandom); do
+			[ "$b" -lt $((256 - 256 % n)) ] || continue
+			k+="${RK_ALPHABET:$((b % n)):1}"
+			[ "${#k}" -lt "$RK_LEN" ] || break
+		done
+	done
+	printf -v "$1" '%s' "$k"
+}
+
+show_recovery_key() {
+	local k="$1"
+	echo
+	echo "=================== RECOVERY KEY ==================="
+	echo
+	echo "    $(echo "$k" | sed 's/..../& /g')"
+	echo
+	echo "It unlocks the Saved State if the passphrase is lost."
+	echo "Type it at the boot prompt as 32 letters, without spaces."
+	echo "It is shown only now. Write it down or photograph the code"
+	echo "below, and keep it away from the stick."
+	echo
+	qrencode -t ANSIUTF8 -m 2 "$k" 2>/dev/null || true
+	echo "===================================================="
+	if [ -t 0 ]; then
+		local last
+		while true; do
+			read -r -p "To confirm you have it, type its last 4 letters: " last
+			[ "$last" = "${k: -4}" ] && break
+			echo "That does not match." >&2
+		done
+	fi
+}
+
+keyfile() { # name value -> path (secret_dir must already have run in this shell)
+	[ -n "$tmp" ] || die "internal: no secrets dir"
+	printf '%s' "$2" > "$tmp/$1"
+	echo "$tmp/$1"
+}
+
+# Writes the volume key to $tmp/vk if the given passphrase or Recovery Key opens $1.
+volume_key() { # dev secret
+	local kf
+	kf="$(keyfile auth "$2")"
+	cryptsetup open --test-passphrase --key-file "$kf" "$1" 2>/dev/null || die "that is not the passphrase or Recovery Key"
+	rm -f "$tmp/vk"
+	cryptsetup luksDump --dump-volume-key --volume-key-file "$tmp/vk" --batch-mode --key-file "$kf" "$1" >/dev/null
+}
+
+# Puts a new secret into a fixed keyslot without ever leaving the volume with
+# fewer working keys than before: spare slot first, then swap.
+replace_slot() { # dev slot secret
+	local kf
+	kf="$(keyfile new "$3")"
+	cryptsetup luksKillSlot --batch-mode "$1" "$SLOT_SPARE" </dev/null 2>/dev/null || true
+	cryptsetup luksAddKey --batch-mode --volume-key-file "$tmp/vk" --new-key-slot "$SLOT_SPARE" "$1" "$kf"
+	cryptsetup luksKillSlot --batch-mode "$1" "$2" </dev/null 2>/dev/null || true
+	cryptsetup luksAddKey --batch-mode --volume-key-file "$tmp/vk" --new-key-slot "$2" "$1" "$kf"
+	# Batch mode needs no passphrase but still prints "Nothing to read on input".
+	cryptsetup luksKillSlot --batch-mode "$1" "$SLOT_SPARE" </dev/null 2>/dev/null
+}
+
+cmd_setup() {
+	local yes="" disk dev size_b state_b model pass rk kf mnt
+	[ "${1:-}" = --yes ] && yes=1
+	secret_dir
+	disk="$(require_stick)"
+	dev="/dev/$disk"
+	is_state "$(state_part "$disk")" && die "$dev is already a Rescue Stick. See: rescuebot-stick status"
+	[ ! -e "$(state_part "$disk")" ] || die "$dev already has a partition 3; refusing to overwrite it"
+	size_b="$(blockdev --getsize64 "$dev")"
+	state_b=$((size_b - STATE_START * 512))
+	[ "$state_b" -ge "$MIN_STATE_BYTES" ] || die "$dev is too small: needs at least $(((STATE_START * 512 + MIN_STATE_BYTES) >> 30)) GiB"
+	model="$(lsblk -ndo VENDOR,MODEL "$dev" | xargs)"
+
+	cat <<EOF
+Stick Setup
+
+This turns the USB stick Rescuebot booted from into a Rescue Stick:
+  stick:        $dev  ${model:-unknown model}, $((size_b >> 30)) GiB
+  Saved State:  $((state_b >> 30)) GiB, encrypted, from 8 GiB to the end of the stick
+  kept:         the first 8 GiB (Rescuebot itself, plus room for upgrades)
+  overwritten:  everything else on this stick
+
+At each boot you will be asked for the passphrase. Skipping it (Enter, then n)
+gives a Stateless Boot that saves nothing. The prompt uses a US keyboard
+layout: if yours differs, choose a passphrase that types the same on both.
+
+EOF
+	if [ -z "$yes" ]; then
+		[ -t 0 ] || die "not a terminal: pass --yes to confirm"
+		local answer
+		read -r -p "Type yes to continue: " answer
+		[ "$answer" = yes ] || die "cancelled, nothing changed"
+	fi
+
+	new_passphrase pass
+	new_recovery_key rk
+
+	echo "Creating partition 3 ..."
+	echo "$STATE_START,,83" | sfdisk --quiet --no-reread --no-tell-kernel --append "$dev"
+	partx --add --nr 3 "$dev"
+	udevadm settle
+	local part
+	part="$(state_part "$disk")"
+	[ -b "$part" ] || die "partition $part did not appear"
+	dd if=/dev/zero of="$part" bs=1M count=32 conv=fsync status=none
+
+	echo "Encrypting (this takes a few seconds) ..."
+	kf="$(keyfile pass "$pass")"
+	cryptsetup luksFormat --batch-mode --type luks2 --label "$LUKS_LABEL" --key-slot "$SLOT_PASS" "$part" "$kf"
+	cryptsetup luksAddKey --batch-mode --key-file "$kf" --new-key-slot "$SLOT_RECOVERY" "$part" "$(keyfile rk "$rk")"
+	cryptsetup open --key-file "$kf" "$part" rescuebot-setup
+	mkfs.ext4 -q -L "$FS_LABEL" /dev/mapper/rescuebot-setup
+	mnt="$(mktemp -d /run/rescuebot-state.XXXXXX)"
+	mount /dev/mapper/rescuebot-setup "$mnt"
+	# Data and settings only, bind-mounted over the image (ADR 0009). No union,
+	# no root overlay: a later image must not be shadowed by saved system files.
+	cat > "$mnt/persistence.conf" <<EOF
+/home bind
+/var/lib/rescuebot bind
+/etc/NetworkManager/system-connections bind
+EOF
+	# Seed with what this session already has, so nothing done so far is lost.
+	mkdir -p "$mnt/home" "$mnt/var/lib/rescuebot" "$mnt/etc/NetworkManager/system-connections"
+	cp -a /home/. "$mnt/home/"
+	[ -d /var/lib/rescuebot ] && cp -a /var/lib/rescuebot/. "$mnt/var/lib/rescuebot/"
+	cp -a /etc/NetworkManager/system-connections/. "$mnt/etc/NetworkManager/system-connections/" 2>/dev/null || true
+	chmod 700 "$mnt/etc/NetworkManager/system-connections"
+	umount "$mnt"; rmdir "$mnt"
+	cryptsetup close rescuebot-setup
+
+	show_recovery_key "$rk"
+	echo
+	echo "Done. $dev is a Rescue Stick. Reboot and enter the passphrase to use the Saved State."
+}
+
+cmd_status() {
+	local disk part unlocked=no
+	disk="$(boot_disk)"
+	[ -n "$disk" ] || { echo "Booted from read-only media (Live ISO): no Saved State on this boot."; return 0; }
+	part="$(state_part "$disk")"
+	echo "Boot stick:   /dev/$disk ($(lsblk -ndo TRAN,VENDOR,MODEL,SIZE "/dev/$disk" | xargs))"
+	if ! is_state "$part"; then
+		echo "Saved State:  none (run: rescuebot-stick setup)"
+		return 0
+	fi
+	if lsblk -nro TYPE,MOUNTPOINTS "$part" | grep -q '^crypt .*/run/live/persistence'; then unlocked=yes; fi
+	echo "Saved State:  $part, $(lsblk -ndo SIZE "$part" | xargs), unlocked this boot: $unlocked"
+	[ "$unlocked" = yes ] || echo "              (this is a Stateless Boot: nothing is being saved)"
+	local slots
+	slots="$(cryptsetup luksDump "$part" | awk '/^Keyslots:/{k=1;next} /^[A-Z]/{k=0} k && /^  [0-9]+: /{sub(":","",$1); print $1}' | xargs)"
+	echo "Keyslots:     ${slots:-none} (0 = passphrase, 1 = Recovery Key)"
+}
+
+state_part_or_die() {
+	local disk part
+	disk="$(require_stick)"
+	part="$(state_part "$disk")"
+	is_state "$part" || die "this stick has no Saved State yet. Run: rescuebot-stick setup"
+	echo "$part"
+}
+
+cmd_passphrase() {
+	local part cur pass
+	part="$(state_part_or_die)"
+	secret_dir
+	read_secret "Current passphrase or Recovery Key: " cur
+	volume_key "$part" "$cur"
+	new_passphrase pass
+	replace_slot "$part" "$SLOT_PASS" "$pass"
+	echo "Passphrase changed. The Recovery Key is unchanged."
+}
+
+cmd_recovery_key() {
+	local part cur rk
+	part="$(state_part_or_die)"
+	secret_dir
+	read_secret "Passphrase or current Recovery Key: " cur
+	volume_key "$part" "$cur"
+	new_recovery_key rk
+	replace_slot "$part" "$SLOT_RECOVERY" "$rk"
+	show_recovery_key "$rk"
+	echo "New Recovery Key set. The old one no longer works."
+}
+
+case "${1:-}" in
+	setup) shift; cmd_setup "$@" ;;
+	status) cmd_status ;;
+	passphrase) cmd_passphrase ;;
+	recovery-key) cmd_recovery_key ;;
+	*) sed -n '2,11s/^# \{0,1\}//p' "$0"; exit 2 ;;
+esac
