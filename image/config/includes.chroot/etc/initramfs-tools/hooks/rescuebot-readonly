@@ -1,5 +1,15 @@
 #!/bin/sh
-# 62-rescuebot-readonly.rules (copied in by the udev hook) runs blockdev.
-case "$1" in prereqs) exit 0 ;; esac
+# Boot-time disk safety in the initrd (ADR 0002):
+# - blockdev for 62-rescuebot-readonly.rules (copied in by the udev hook);
+# - mdadm.conf with AUTO -all and no ARRAY lines. Runs after mdadm's hook, which
+#   replaces a config without ARRAY lines by `mkconf` output: that drops AUTO and
+#   lists whatever arrays the build host has.
+PREREQ="mdadm"
+case "$1" in prereqs) echo "$PREREQ"; exit 0 ;; esac
 . /usr/share/initramfs-tools/hook-functions
 copy_exec /usr/sbin/blockdev /usr/sbin
+conf="$DESTDIR/etc/mdadm/mdadm.conf"
+mkdir -p "${conf%/*}"
+touch "$conf"
+sed -i '/^AUTO[[:space:]]/d; /^ARRAY[[:space:]]/d' "$conf"
+echo 'AUTO -all' >> "$conf"
