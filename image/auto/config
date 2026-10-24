@@ -19,6 +19,12 @@ LIVE_SECURITY="http://deb.debian.org/debian-security/"
 # --linux-packages is limited to linux-image so no headers/DKMS are pulled in.
 # memtest86+ is a legacy-BIOS-only menu entry: its EFI binary is not Secure Boot
 # signed, and config/bootloaders/grub-pc/grub.cfg has no memtest entry.
+#
+# Saved State (Stick Setup, ADR 0001): live-boot looks for persistence only in
+# LUKS volumes labelled "persistence" (lukslabel) and only by label
+# (storage=filesystem). Its defaults would mount every partition read-write to
+# look for persistence files, Patient Disks included. Declining the passphrase
+# prompt boots stateless.
 
 lb config noauto \
 	--distribution trixie \
@@ -54,7 +60,7 @@ lb config noauto \
 	--iso-application "Rescuebot" \
 	--iso-publisher "Rescuebot project; https://github.com/jasonfen/rescuebot" \
 	--iso-volume "RESCUEBOT" \
-	--bootappend-live "boot=live components quiet live-config.hostname=rescuebot live-config.username=rescue" \
+	--bootappend-live "boot=live components quiet live-config.hostname=rescuebot live-config.username=rescue persistence persistence-encryption=lukslabel persistence-storage=filesystem" \
 	"${@}"
 
 # Build-time backports source, from the same snapshot (written here because it
