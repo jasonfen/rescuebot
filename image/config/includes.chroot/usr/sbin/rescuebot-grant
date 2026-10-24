@@ -1,0 +1,119 @@
+#!/bin/bash
+# Write Grants (ADR 0002, 0006): every disk except the Rescue Stick boots
+# read-only at the block layer. A person makes one disk writable with a Write
+# Grant; Claude may ask for one but must not give it.
+#
+#   rescuebot-grant DISK            give a Write Grant (person at a terminal only)
+#   rescuebot-grant --revoke DISK   make DISK read-only again (refused while mounted)
+#   rescuebot-grant --list          show every disk's read-only state and this boot's grants
+#
+# DISK is a name (sdb), a /dev path, a /dev/disk/by-* link, or a partition (the
+# grant covers its whole disk). A grant lasts until revoked, until the disk is
+# unplugged, or until reboot. Every grant and revoke is appended to
+# /var/lib/rescuebot/write-grants.log, which a Rescue Stick keeps in its Saved State.
+set -euo pipefail
+
+[ "$(id -u)" -eq 0 ] || exec sudo "$0" "$@"
+
+LOG=/var/lib/rescuebot/write-grants.log
+
+die() { echo "rescuebot-grant: $*" >&2; exit 1; }
+
+# Prints the whole-disk name (e.g. sdb) for any way of naming a disk or partition.
+resolve_disk() {
+	local arg="$1" dev type parent
+	case "$arg" in /*) dev="$arg" ;; *) dev="/dev/$arg" ;; esac
+	dev="$(readlink -f "$dev")"
+	[ -b "$dev" ] || die "$1: not a block device"
+	type="$(lsblk -ndo TYPE "$dev")"
+	case "$type" in
+		disk) basename "$dev" ;;
+		part)
+			parent="$(lsblk -ndo PKNAME "$dev")"
+			[ -n "$parent" ] || die "$1: cannot find the disk this partition is on"
+			echo "$parent"
+			;;
+		*) die "$1 is a $type device; Write Grants apply to physical disks" ;;
+	esac
+}
+
+is_stick() { # disk
+	[ "$(lsblk -ndo FSTYPE,LABEL "/dev/$1" | xargs)" = "iso9660 RESCUEBOT" ]
+}
+
+log() { # action disk
+	local id
+	id="$(find -L /dev/disk/by-id -samefile "/dev/$2" 2>/dev/null | grep -v -- '-part' | sort | head -n1)"
+	mkdir -p "$(dirname "$LOG")"
+	printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\tboot=%s\tby=%s on %s\n' \
+		"$(date -Is)" "$1" "/dev/$2" "${id:-no-by-id}" \
+		"$(lsblk -ndo MODEL "/dev/$2" | xargs)" "$(lsblk -ndo SERIAL "/dev/$2" | xargs)" \
+		"$(lsblk -ndo SIZE "/dev/$2" | xargs)" "$(cat /proc/sys/kernel/random/boot_id)" \
+		"${SUDO_USER:-root}" "$(tty 2>/dev/null || echo no-tty)" >> "$LOG"
+}
+
+set_rw() { # disk 0|1  (0 = writable)
+	local p
+	if [ "$2" = 0 ]; then blockdev --setrw "/dev/$1"; else blockdev --setro "/dev/$1"; fi
+	for p in $(lsblk -nlo NAME,TYPE "/dev/$1" | awk '$2 == "part" {print $1}'); do
+		if [ "$2" = 0 ]; then blockdev --setrw "/dev/$p"; else blockdev --setro "/dev/$p"; fi
+	done
+	[ "$(blockdev --getro "/dev/$1")" = "$2" ] || die "could not change /dev/$1 (kernel read-only flag is $(blockdev --getro "/dev/$1"))"
+}
+
+cmd_grant() {
+	local disk answer
+	disk="$(resolve_disk "$1")"
+	is_stick "$disk" && die "/dev/$disk is the Rescue Stick; it is always writable"
+	[ "$(blockdev --getro "/dev/$disk")" = 1 ] || { echo "/dev/$disk is already writable."; exit 0; }
+	# A Write Grant is a person's decision. Claude Code and scripts run commands
+	# without a terminal; this is a guard against accidents, not a lock (ADR 0006).
+	[ -t 0 ] && [ -t 1 ] || die "a Write Grant must be given by a person at a terminal, not by a script or Claude. Run it yourself: sudo rescuebot-grant $disk"
+
+	echo "Write Grant for /dev/$disk"
+	echo
+	lsblk -o NAME,SIZE,TYPE,FSTYPE,LABEL,MODEL,SERIAL,TRAN "/dev/$disk"
+	echo
+	echo "Anything that runs on this machine, including Claude, will be able to"
+	echo "change or destroy data on this disk until you revoke the grant, unplug it"
+	echo "or reboot. If it holds data that matters and may be failing, image it first."
+	echo
+	read -r -p "Type the disk name ($disk) to make it writable: " answer
+	[ "$answer" = "$disk" ] || die "not confirmed, /dev/$disk stays read-only"
+	set_rw "$disk" 0
+	log grant "$disk"
+	echo "/dev/$disk is writable. Revoke with: sudo rescuebot-grant --revoke $disk"
+}
+
+cmd_revoke() {
+	local disk
+	disk="$(resolve_disk "$1")"
+	is_stick "$disk" && die "/dev/$disk is the Rescue Stick; it stays writable"
+	if lsblk -nlo MOUNTPOINTS "/dev/$disk" | grep -q .; then
+		die "/dev/$disk has mounted filesystems; unmount them first:$(lsblk -nlo NAME,MOUNTPOINTS "/dev/$disk" | awk 'NF > 1 {printf " %s", $2}')"
+	fi
+	set_rw "$disk" 1
+	log revoke "$disk"
+	echo "/dev/$disk is read-only again."
+}
+
+cmd_list() {
+	local boot
+	boot="$(cat /proc/sys/kernel/random/boot_id)"
+	echo "Disks (RO 1 = read-only):"
+	lsblk -d -e 7,11 -o NAME,RO,SIZE,TRAN,MODEL,SERIAL,LABEL
+	echo
+	echo "Write Grants this boot:"
+	if [ -f "$LOG" ] && grep -q "boot=$boot" "$LOG"; then
+		grep "boot=$boot" "$LOG" | cut -f1-3,5
+	else
+		echo "  none"
+	fi
+}
+
+case "${1:-}" in
+	--list) cmd_list ;;
+	--revoke) [ -n "${2:-}" ] || die "usage: rescuebot-grant --revoke DISK"; cmd_revoke "$2" ;;
+	-*|"") sed -n '2,14s/^# \{0,1\}//p' "$0"; exit 2 ;;
+	*) cmd_grant "$1" ;;
+esac

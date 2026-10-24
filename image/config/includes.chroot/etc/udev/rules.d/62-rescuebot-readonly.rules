@@ -1,0 +1,16 @@
+# Every disk starts read-only at the block layer (ADR 0002, 0006), so nothing at
+# boot or after hotplug writes to a Patient Disk: not a mount, not a journal
+# replay during a read-only mount, not RAID or LVM metadata. Exempt: the Rescue
+# Stick, recognised by its own ISO 9660 label. A partition is read-only while its
+# disk is. `rescuebot-grant` clears the flag for one disk at a time.
+#
+# Sorts after 60-persistent-storage.rules, which sets ID_FS_*. The initramfs udev
+# hook copies this file into the initrd, so it applies before live-boot searches
+# for its boot medium (which mounts candidate partitions to look).
+ACTION!="add", GOTO="rescuebot_ro_end"
+SUBSYSTEM!="block", GOTO="rescuebot_ro_end"
+ENV{DEVTYPE}!="disk", GOTO="rescuebot_ro_end"
+KERNEL!="sd*|nvme*|mmcblk*|vd*|hd*|xvd*", GOTO="rescuebot_ro_end"
+ENV{ID_FS_TYPE}=="iso9660", ENV{ID_FS_LABEL}=="RESCUEBOT", GOTO="rescuebot_ro_end"
+RUN+="/usr/sbin/blockdev --setro $devnode"
+LABEL="rescuebot_ro_end"
