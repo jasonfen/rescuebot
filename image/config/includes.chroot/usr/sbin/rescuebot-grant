@@ -42,14 +42,17 @@ is_stick() { # disk
 }
 
 log() { # action disk
-	local id
-	id="$(find -L /dev/disk/by-id -samefile "/dev/$2" 2>/dev/null | grep -v -- '-part' | sort | head -n1)"
+	local id t
+	# A hardware id (model + serial) identifies the disk across boots; skip ids
+	# that describe its contents (LVM, md, dm) rather than the drive.
+	id="$(find -L /dev/disk/by-id -samefile "/dev/$2" 2>/dev/null | grep -v -E -- '-part[0-9]+$|/(lvm-pv-uuid|md-uuid|md-name|dm-)' | sort | head -n1)"
+	t="$(tty 2>/dev/null)" || t=no-tty
 	mkdir -p "$(dirname "$LOG")"
 	printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\tboot=%s\tby=%s on %s\n' \
 		"$(date -Is)" "$1" "/dev/$2" "${id:-no-by-id}" \
 		"$(lsblk -ndo MODEL "/dev/$2" | xargs)" "$(lsblk -ndo SERIAL "/dev/$2" | xargs)" \
 		"$(lsblk -ndo SIZE "/dev/$2" | xargs)" "$(cat /proc/sys/kernel/random/boot_id)" \
-		"${SUDO_USER:-root}" "$(tty 2>/dev/null || echo no-tty)" >> "$LOG"
+		"${SUDO_USER:-root}" "$t" >> "$LOG"
 }
 
 set_rw() { # disk 0|1  (0 = writable)
@@ -105,7 +108,7 @@ cmd_list() {
 	echo
 	echo "Write Grants this boot:"
 	if [ -f "$LOG" ] && grep -q "boot=$boot" "$LOG"; then
-		grep "boot=$boot" "$LOG" | cut -f1-3,5
+		grep "boot=$boot" "$LOG" | cut -f1-4
 	else
 		echo "  none"
 	fi
