@@ -1,0 +1,24 @@
+#!/bin/sh
+# Patient RAID and LVM must not be assembled or activated behind the person's
+# back (ADR 0002): mdadm incremental assembly and LVM autoactivation run from
+# udev at boot and on hotplug, and both can write metadata. The person (or
+# Claude, guided) assembles them deliberately. Then rebuild the initrd so it
+# carries this mdadm.conf and the read-only udev rule from includes.chroot.
+set -e
+fail() { echo "ASSERT FAILED: $*" >&2; exit 1; }
+
+conf=/etc/mdadm/mdadm.conf
+mkdir -p /etc/mdadm
+touch "$conf"
+sed -i '/^AUTO[[:space:]]/d' "$conf"
+echo 'AUTO -all' >> "$conf"
+
+lvm=/etc/lvm/lvm.conf
+sed -i -E 's/^([[:space:]]*)#[[:space:]]*event_activation = 1$/\1event_activation = 0/' "$lvm"
+sed -i -E 's/^([[:space:]]*)#[[:space:]]*auto_activation_volume_list = \[.*\]$/\1auto_activation_volume_list = []/' "$lvm"
+[ "$(lvmconfig --typeconfig current global/event_activation 2>/dev/null)" = "event_activation=0" ] || fail "lvm event_activation not 0"
+lvmconfig --typeconfig current activation/auto_activation_volume_list 2>/dev/null | grep -q '\[\]' || fail "lvm auto_activation_volume_list not empty"
+
+[ -f /etc/udev/rules.d/62-rescuebot-readonly.rules ] || fail "read-only udev rule missing before initrd rebuild"
+update-initramfs -u -k all
+echo "no-auto-assembly: mdadm AUTO -all, lvm autoactivation off, initrd rebuilt"

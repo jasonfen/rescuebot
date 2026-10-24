@@ -1,0 +1,31 @@
+#!/bin/sh
+# Fail the build unless the initrd carries what boot-time safety depends on:
+# cryptsetup and askpass (Saved State unlock, from cryptsetup-initramfs), and
+# the read-only udev rule with blockdev (Patient Disks read-only before
+# live-boot searches for its medium), plus mdadm.conf with AUTO -all.
+# Binary hooks run with the binary/ tree as the working directory.
+set -e
+fail() { echo "ASSERT FAILED: $*" >&2; exit 1; }
+cp live/initrd.img ../chroot/tmp/rescuebot-initrd.img
+listing="$(chroot ../chroot lsinitramfs /tmp/rescuebot-initrd.img)"
+rm -rf ../chroot/tmp/rescuebot-initrd
+mkdir -p ../chroot/tmp/rescuebot-initrd
+chroot ../chroot unmkinitramfs /tmp/rescuebot-initrd.img /tmp/rescuebot-initrd \
+	|| fail "unmkinitramfs exited $?"
+mdconf="$(find ../chroot/tmp/rescuebot-initrd -path '*/etc/mdadm/mdadm.conf' | head -n1)"
+if ! grep -qx 'AUTO -all' "$mdconf" 2>/dev/null; then
+	echo "initrd extracted to: $(ls ../chroot/tmp/rescuebot-initrd | xargs)" >&2
+	echo "mdadm.conf candidates:" >&2
+	find ../chroot/tmp/rescuebot-initrd -name 'mdadm*' >&2
+	[ -n "$mdconf" ] && { echo "--- $mdconf" >&2; cat "$mdconf" >&2; }
+	echo "--- chroot /etc/mdadm/mdadm.conf" >&2; cat ../chroot/etc/mdadm/mdadm.conf >&2 || true
+	fail "initrd mdadm.conf lacks AUTO -all"
+fi
+rm -rf ../chroot/tmp/rescuebot-initrd ../chroot/tmp/rescuebot-initrd.img
+# Paths may sit under usr/ or not, depending on the usr-merge layout of the initrd.
+# live-boot's helpers are the positive control that the listing works at all.
+for f in live/boot/9990-misc-helpers.sh sbin/cryptsetup cryptsetup/askpass \
+	sbin/blockdev rules.d/62-rescuebot-readonly.rules; do
+	echo "$listing" | grep -qE "(^|/)$f\$" || fail "$f missing from initrd"
+done
+echo "initrd assertions passed (live-boot, cryptsetup, askpass, blockdev, read-only rule, mdadm AUTO -all)"
