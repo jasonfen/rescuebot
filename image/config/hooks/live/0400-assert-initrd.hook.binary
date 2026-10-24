@@ -8,10 +8,19 @@ set -e
 fail() { echo "ASSERT FAILED: $*" >&2; exit 1; }
 cp live/initrd.img ../chroot/tmp/rescuebot-initrd.img
 listing="$(chroot ../chroot lsinitramfs /tmp/rescuebot-initrd.img)"
+rm -rf ../chroot/tmp/rescuebot-initrd
 mkdir -p ../chroot/tmp/rescuebot-initrd
-chroot ../chroot unmkinitramfs /tmp/rescuebot-initrd.img /tmp/rescuebot-initrd
+chroot ../chroot unmkinitramfs /tmp/rescuebot-initrd.img /tmp/rescuebot-initrd \
+	|| fail "unmkinitramfs exited $?"
 mdconf="$(find ../chroot/tmp/rescuebot-initrd -path '*/etc/mdadm/mdadm.conf' | head -n1)"
-grep -qx 'AUTO -all' "$mdconf" 2>/dev/null || fail "initrd mdadm.conf lacks AUTO -all"
+if ! grep -qx 'AUTO -all' "$mdconf" 2>/dev/null; then
+	echo "initrd extracted to: $(ls ../chroot/tmp/rescuebot-initrd | xargs)" >&2
+	echo "mdadm.conf candidates:" >&2
+	find ../chroot/tmp/rescuebot-initrd -name 'mdadm*' >&2
+	[ -n "$mdconf" ] && { echo "--- $mdconf" >&2; cat "$mdconf" >&2; }
+	echo "--- chroot /etc/mdadm/mdadm.conf" >&2; cat ../chroot/etc/mdadm/mdadm.conf >&2 || true
+	fail "initrd mdadm.conf lacks AUTO -all"
+fi
 rm -rf ../chroot/tmp/rescuebot-initrd ../chroot/tmp/rescuebot-initrd.img
 # Paths may sit under usr/ or not, depending on the usr-merge layout of the initrd.
 # live-boot's helpers are the positive control that the listing works at all.
